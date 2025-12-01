@@ -20,13 +20,13 @@
 
 const uint8_t RF_PIN       = 0;   // PB0 -> DATA módulo TX 433 MHz
 const uint8_t ONEWIRE_PIN  = 2;   // PB2 -> DS18B20 DQ
-const uint8_t LED_PIN      = 1;   // PB1 -> LED indicador de transmisión
 
 // Periodo entre emisiones (segundos)
 const uint32_t PERIOD_SEC = 39;
 
-// Tiempo semibit (µs) para OOK (Oregon V2.1 ~ 976 µs/bit -> ~488 µs/semibit)
-const uint16_t T_UNIT_US = 500;   // puedes afinar luego a 488 si quieres
+// Tiempo semibit (µs) para OOK Oregon V2.1 (ajustado según sensor real)
+// Sensor real: ~984µs HIGH, ~964µs LOW → promedio ~974µs → semibit ~487µs
+const uint16_t T_UNIT_US = 488;
 
 // ---------------------------------------------------------------------------
 // OneWire para DS18B20
@@ -64,8 +64,8 @@ const uint16_t M_TABLE[71] PROGMEM = {
 // Parámetros Oregon del "sensor emulado"
 // ---------------------------------------------------------------------------
 
-uint8_t g_channel   = 2;   // Canal 1..3
-uint8_t g_device_id = 34;  // House code (ID)
+uint8_t g_channel   = 1;   // Canal 1..3
+uint8_t g_device_id = 10;  // House code (ID)
 
 
 // ---------------------------------------------------------------------------
@@ -300,6 +300,8 @@ void send_bits_ook(const uint8_t *bits, int n_bits)
       delayMicroseconds(T_UNIT_US);
     }
   }
+  // IMPORTANTE: Asegurar que terminamos con RF en LOW
+  digitalWrite(RF_PIN, LOW);
 }
 
 // Envía una trama EC40 post-reflect por RF (2 veces, como el sensor real)
@@ -308,20 +310,16 @@ void sendOregonFrame(const uint8_t ec40_post[8])
   uint8_t bits[168];
   build_osv21_bits_from_ec40_post(ec40_post, bits);
 
-  // Encender LED durante transmisión
-  digitalWrite(LED_PIN, HIGH);
-
-  // Primera trama
+  // Primera ráfaga (~164 ms con T_UNIT=488µs)
   send_bits_ook(bits, 168);
 
-  // Pausa entre tramas (~10 ms)
-  delayMicroseconds(10000);
+  // Gap entre ráfagas: ~8.8 ms (como el sensor real THN132N)
+  // Sensor real: ~8788 µs. Compensamos overhead del código (~520µs)
+  // Delay ajustado: 8300µs → gap real ≈ 8800µs
+  delayMicroseconds(8300);
 
-  // Segunda trama
+  // Segunda ráfaga (~164 ms)
   send_bits_ook(bits, 168);
-
-  // Apagar LED al finalizar
-  digitalWrite(LED_PIN, LOW);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,9 +331,6 @@ void setup()
   pinMode(RF_PIN, OUTPUT);
   digitalWrite(RF_PIN, LOW);
 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-
   // En ATtiny normalmente no usas Serial, pero lo dejo comentado:
   // Serial.begin(9600);
 }
@@ -343,26 +338,26 @@ void setup()
 void loop()
 {
   static uint32_t last_ms = 0;
+  static float last_valid_temp = 20.0; // Temperatura por defecto
   uint32_t now = millis();
 
   if (now - last_ms >= PERIOD_SEC * 1000UL) {
     last_ms = now;
 
     float tempC;
-    if (!readDS18B20(tempC)) {
-      // Si falla el DS18B20, no transmitir
-      // (podrías retransmitir la última válida, etc.)
-      return;
+    if (readDS18B20(tempC)) {
+      // Si leemos correctamente, guardamos la temperatura
+      tempC = roundf(tempC * 10.0f) / 10.0f;
+      last_valid_temp = tempC;
+    } else {
+      // Si falla el DS18B20, usar la última válida
+      tempC = last_valid_temp;
     }
-
-    // Si quisieras limitar a 1 decimal:
-    tempC = roundf(tempC * 10.0f) / 10.0f;
 
     uint8_t ec40[8];
     build_ec40_post(tempC, g_channel, g_device_id, ec40);
 
-    // Aquí podrías encender un LED de debug durante la emisión, etc.
-
+    // SIEMPRE transmitir, incluso si el sensor falló
     sendOregonFrame(ec40);
   }
 }

@@ -17,9 +17,26 @@ Contiene documentación técnica obtenida mediante ingeniería inversa:
 
 Esta documentación fue creada mediante el análisis de tramas reales capturadas con rtl_433 y sirve como referencia para el desarrollo del emulador.
 
-## 📁 Archivos del Proyecto
+## 📁 Estructura del Proyecto
 
-### 🔧 `attiny85THN132N.ino`
+```
+Antigravity/
+├── esp32/                        # Código para ESP32
+│   ├── oregon_transmitter.ino    # Transmisor Oregon THN132N con RMT
+│   └── 184funcionaTX.ino         # Test básico de transmisión
+├── attiny/                       # Código para ATtiny85
+│   └── attiny85THN132N.ino       # Emulador Oregon con sensor DS18B20
+├── Docs/                         # Documentación técnica
+│   └── Oregon_THN132N_BAR206.pdf # Análisis de protocolo (reverse engineering)
+├── gen_tramas_thn132n.py         # Generador de tramas en Python
+└── tramas_thn132n.csv            # Tramas pre-calculadas
+```
+
+---
+
+## 💾 Código para Microcontroladores
+
+### 🔧 ATtiny85: `attiny/attiny85THN132N.ino`
 **Plataforma:** ATtiny85 (Digispark Kickstarter)  
 **Descripción:** Firmware completo para emular un sensor Oregon THN132N usando un ATtiny85.
 
@@ -67,7 +84,7 @@ const uint16_t T_UNIT_US  = 500;   // Microsegundos por semibit
 
 ---
 
-### 🖥️ `oregon_transmitter.ino`
+### 🖥️ ESP32: `esp32/oregon_transmitter.ino`
 **Plataforma:** ESP32  
 **Descripción:** Generador completo de tramas Oregon THN132N para ESP32 con transmisión mediante RMT.
 
