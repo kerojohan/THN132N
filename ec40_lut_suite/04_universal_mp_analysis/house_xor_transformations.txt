@@ -1,0 +1,5 @@
+TRANSFORMACIONS XOR ENTRE HOUSE IDs
+================================================================================
+
+House 3 XOR House 247 = 0x0 (n=35)
+House 96 XOR House 247 = 0x0 (n=13)
