@@ -36,165 +36,67 @@ static uint8_t DEVICE_ID  = 247;    // House Code (0-255)
 static uint8_t ROLLING_CODE = 0x2;  // Rolling code (0, 1, 2, o 8)
 
 // ---------------------------------------------------------------------------
-// TAULA DE TRANSFORMACIONS XOR PER ROLLING CODE
+// TABLAS P[d] y M[e] (House 247, Nib7=0x2)
 // ---------------------------------------------------------------------------
-// Descobriment: P(nib7) = P(nib7_base) XOR NIB7_XOR
-// Base: Nib7 = 0x2
+// Método correcto: R12 = P[d] XOR M[e]
+// Estas son las tablas completas para House Code 247
 
-const uint8_t NIB7_XOR_TABLE[16] = {
-  0x6, // 0x0: P(0) = P(2) XOR 0x6
-  0xD, // 0x1: P(1) = P(2) XOR 0xD
-  0x0, // 0x2: P(2) = P(2) (base)
-  0x0, 0x0, 0x0, 0x0, 0x0, // 0x3-0x7: No usats
-  0x7, // 0x8: P(8) = P(2) XOR 0x7
-  0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0  // 0x9-0xF: No usats
+static const uint16_t P_TABLE[10] = {
+  0x000, 0x075, 0x0EA, 0x09F, 0x0B5,
+  0x0C0, 0x05F, 0x02A, 0x06B, 0x01E
+};
+
+static const int8_t  M_MIN_E = -16;
+static const int8_t  M_MAX_E =  54;
+
+static const uint16_t M_TABLE[71] = {
+  0x2A1, 0x252, 0x203, 0x2B5, 0x2E4, 0x217, 0x246, 0x29A, // -16..-9
+  0x2CB, 0x2F7, 0x2A6, 0x255, 0x204, 0x2B2, 0x2E3, 0x210, // -8..-1
+  0x2C2, 0x148, 0x1BB, 0x1EA, 0x15C, 0x10D, 0x1FE, 0x1AF, // 0..7
+  0x193, 0x1C2, 0x11E, 0x14F, 0x1BC, 0x236, 0x280, 0x10A, // 8..15
+  0x1F9, 0x1A8, 0x194, 0x866, 0x2CC, 0x146, 0x1B5, 0x1E4, // 16..23
+  0x152, 0x103, 0x1F0, 0x1A1, 0x246, 0x1CC, 0x110, 0x141, // 24..31
+  0x1B2, 0x1E3, 0x8F6, 0x8A7, 0x854, 0x805, 0x839, 0x868, // 32..39
+  0x8C6, 0x897, 0x864, 0x835, 0x883, 0x8D2, 0x821, 0x870, // 40..47
+  0x84C, 0x81D, 0x162, 0x133, 0x863, 0x191, 0x884          // 48..54
 };
 
 // ---------------------------------------------------------------------------
-// LUT DE P (Base per Nib7=0x2, House 247)
-// 405 punts: -16.0°C a +61.4°C
-// ---------------------------------------------------------------------------
-// Índex: temp_idx = (int)round((temp_c + 40) * 10)
-
-struct P_LUT_Entry {
-  int16_t temp_idx;
-  uint8_t p_value;
-};
-
-// LUT compacta (només punts capturats)
-const P_LUT_Entry P_LUT_BASE[] PROGMEM = {
-  {240, 0xA}, {241, 0x4}, {242, 0x3}, {243, 0x7}, {244, 0x0}, 
-  {245, 0x9}, {246, 0xE}, {247, 0xC}, {248, 0xB}, {249, 0x2},
-  {250, 0x5}, {251, 0x1}, {252, 0x6}, {253, 0x2}, {254, 0x5},
-  {255, 0xC}, {256, 0xB}, {257, 0x9}, {258, 0xE}, {259, 0x7},
-  {260, 0x0}, {261, 0xA}, {262, 0xD}, {263, 0x9}, {264, 0xE},
-  {265, 0x7}, {266, 0x0}, {268, 0x5}, {269, 0xC}, {270, 0xB},
-  {271, 0xF}, {272, 0x8}, {273, 0xC}, {274, 0xB}, {275, 0x2},
-  {276, 0x5}, {277, 0x7}, {278, 0x0}, {279, 0x9}, {280, 0xE},
-  {281, 0x0}, {282, 0x7}, {283, 0x3}, {284, 0x4}, {285, 0xD},
-  {286, 0xA}, {288, 0xF}, {289, 0x6}, {290, 0x1}, {291, 0x5},
-  {292, 0x2}, {293, 0x6}, {295, 0x8}, {297, 0xD}, {298, 0xA},
-  {299, 0x3}, {300, 0x4}, {301, 0x8}, {303, 0xB}, {304, 0xC},
-  {306, 0x2}, {307, 0x0}, {308, 0x7}, {309, 0xE}, {310, 0x9},
-  {311, 0xD}, {312, 0xA}, {313, 0xE}, {314, 0x9}, {315, 0x0},
-  {316, 0x7}, {317, 0x5}, {319, 0xB}, {320, 0xC}, {321, 0xE},
-  {322, 0x9}, {324, 0xA}, {325, 0x3}, {326, 0x4}, {328, 0x1},
-  {329, 0x8}, {330, 0xF}, {331, 0xB}, {332, 0xC}, {333, 0x8},
-  {334, 0xF}, {335, 0x6}, {336, 0x1}, {338, 0x4}, {340, 0xA},
-  {341, 0x4}, {342, 0x3}, {343, 0x7}, {344, 0x0}, {346, 0xE},
-  {347, 0xC}, {349, 0x2}, {350, 0x5}, {352, 0x6}, {354, 0x5},
-  {355, 0xC}, {356, 0xB}, {357, 0x9}, {359, 0x7}, {360, 0x0},
-  {361, 0xA}, {362, 0xD}, {363, 0x9}, {364, 0xE}, {365, 0x7},
-  {367, 0x2}, {368, 0x5}, {369, 0xC}, {371, 0xF}, {373, 0xC},
-  {374, 0xB}, {376, 0x5}, {378, 0x0}, {379, 0x9}, {380, 0xE},
-  {381, 0x0}, {383, 0x3}, {385, 0xD}, {387, 0x8}, {390, 0x1},
-  {392, 0x2}, {394, 0x1}, {396, 0xF}, {398, 0xA}, {400, 0x4},
-  {401, 0xB}, {402, 0x2}, {403, 0x5}, {404, 0x7}, {406, 0x9},
-  {408, 0xA}, {410, 0x9}, {412, 0x7}, {413, 0x0}, {414, 0x2},
-  {416, 0xC}, {417, 0xB}, {418, 0xF}, {419, 0x8}, {420, 0x6},
-  {421, 0x1}, {422, 0x8}, {423, 0xF}, {425, 0xA}, {427, 0x4},
-  {428, 0x0}, {429, 0x7}, {430, 0x3}, {431, 0x4}, {432, 0xD},
-  {433, 0xA}, {434, 0x8}, {435, 0xF}, {437, 0x1}, {438, 0x5},
-  {439, 0x2}, {440, 0x8}, {441, 0xF}, {442, 0x6}, {444, 0x3},
-  {446, 0xD}, {447, 0xA}, {448, 0xE}, {449, 0x9}, {450, 0xD},
-  {451, 0xA}, {452, 0x3}, {453, 0x4}, {454, 0x6}, {455, 0x1},
-  {456, 0x8}, {458, 0xB}, {459, 0xC}, {461, 0x5}, {462, 0xC},
-  {463, 0xB}, {464, 0x9}, {465, 0xE}, {466, 0x7}, {468, 0x4},
-  {469, 0x3}, {471, 0x0}, {472, 0x9}, {473, 0xE}, {474, 0xC},
-  {475, 0xB}, {476, 0x2}, {477, 0x5}, {478, 0x1}, {479, 0x6},
-  {480, 0x4}, {481, 0x3}, {482, 0xA}, {484, 0xF}, {485, 0x8},
-  {486, 0x1}, {488, 0x2}, {489, 0x5}, {490, 0x1}, {491, 0x6},
-  {493, 0x8}, {495, 0xD}, {496, 0x4}, {497, 0x3}, {498, 0x7},
-  {499, 0x0}, {500, 0xC}, {501, 0xB}, {502, 0x2}, {503, 0x5},
-  {504, 0x7}, {505, 0x0}, {506, 0x9}, {507, 0xE}, {508, 0xA},
-  {509, 0xD}, {510, 0x9}, {511, 0xE}, {512, 0x7}, {513, 0x0},
-  {514, 0x2}, {515, 0x5}, {516, 0xC}, {517, 0xB}, {518, 0xF},
-  {519, 0x8}, {520, 0x6}, {521, 0x1}, {522, 0x8}, {523, 0xF},
-  {524, 0xD}, {525, 0xA}, {526, 0x3}, {527, 0x4}, {528, 0x0},
-  {529, 0x7}, {530, 0x3}, {531, 0x4}, {532, 0xD}, {533, 0xA},
-  {534, 0x8}, {535, 0xF}, {536, 0x6}, {537, 0x1}, {538, 0x5},
-  {539, 0x2}, {540, 0x8}, {541, 0xF}, {542, 0x6}, {543, 0x1},
-  {544, 0x3}, {545, 0x4}, {546, 0xD}, {547, 0xA}, {548, 0xE},
-  {549, 0x9}, {550, 0xD}, {551, 0xA}, {552, 0x3}, {553, 0x4},
-  {554, 0x6}, {555, 0x1}, {556, 0x8}, {557, 0xF}, {558, 0xB},
-  {559, 0xC}, {560, 0x2}, {561, 0x5}, {562, 0xC}, {563, 0xB},
-  {564, 0x9}, {565, 0xE}, {566, 0x7}, {567, 0x0}, {568, 0x4},
-  {569, 0x3}, {570, 0x7}, {571, 0x0}, {572, 0x9}, {573, 0xE},
-  {574, 0xC}, {575, 0xB}, {576, 0x2}, {577, 0x5}, {578, 0x1},
-  {579, 0x6}, {580, 0x4}, {581, 0x3}, {582, 0xA}, {583, 0xD},
-  {584, 0xF}, {585, 0x8}, {586, 0x1}, {588, 0x2}, {589, 0x5},
-  {591, 0x6}, {592, 0xF}, {593, 0x8}, {595, 0xD}, {596, 0x4},
-  {597, 0x3}, {598, 0x7}, {599, 0x0}, {600, 0xC}, {601, 0xB},
-  {602, 0x2}, {603, 0x5}, {604, 0x7}, {605, 0x0}, {606, 0x9},
-  {607, 0xE}, {608, 0xA}, {609, 0xD}, {610, 0x9}, {611, 0xE},
-  {612, 0x7}, {613, 0x0}, {614, 0x2}, {615, 0x5}, {616, 0xC},
-  {617, 0xB}, {618, 0xF}, {619, 0x8}, {620, 0x6}, {621, 0x1},
-  {622, 0x8}, {623, 0xF}, {625, 0xA}, {626, 0x3}, {627, 0x4},
-  {629, 0x7}, {631, 0x4}, {632, 0xD}, {633, 0xA}, {634, 0x8},
-  {636, 0x6}, {637, 0x1}, {639, 0x2}, {640, 0x8}, {641, 0xF},
-  {642, 0x6}, {643, 0x1}, {644, 0x3}, {645, 0x4}, {646, 0xD},
-  {647, 0xA}, {649, 0x9}, {651, 0xA}, {652, 0x3}, {653, 0x4},
-  {654, 0x6}, {656, 0x8}, {657, 0xF}, {658, 0xB}, {659, 0xC},
-  {660, 0x2}, {661, 0x5}, {662, 0xC}, {663, 0xB}, {665, 0xE},
-  {666, 0x7}, {667, 0x0}, {668, 0x4}, {670, 0x7}, {671, 0x0},
-  {672, 0x9}, {676, 0x2}, {680, 0x4}, {686, 0x1}, {692, 0xF},
-  {699, 0x0}, {707, 0xE}, {717, 0xB}, {728, 0x0}, {740, 0x8},
-  {746, 0xD}, {753, 0x4}, {769, 0x3}, {786, 0x1}, {807, 0x9},
-  {813, 0x7}, {815, 0x2}, {830, 0x4}, {834, 0xF}, {859, 0xB},
-  {866, 0x0}, {873, 0x9}, {889, 0x2}, {896, 0x3}, {902, 0x5},
-  {910, 0xE}, {915, 0x2}, {926, 0x4}, {931, 0x3}, {965, 0x9},
-  {970, 0x0}, {971, 0x7}, {979, 0x1}, {986, 0x6}, {1014, 0x5}
-};
-
-const int P_LUT_SIZE = sizeof(P_LUT_BASE) / sizeof(P_LUT_Entry);
-
-// ---------------------------------------------------------------------------
-// FUNCIONS UNIVERSALS DESCOBERTES
+// FUNCIONES DE CÁLCULO (método correcto)
 // ---------------------------------------------------------------------------
 
-uint8_t get_p_from_lut(float temp_celsius, uint8_t nib7) {
-  // Calcular índex de temperatura
-  int16_t temp_idx = (int16_t)round((temp_celsius + 40.0) * 10.0);
-  
-  // Buscar valor més proper a la LUT
-  int16_t min_diff = 32767;
-  uint8_t p_base = 0;
-  
-  for (int i = 0; i < P_LUT_SIZE; i++) {
-    P_LUT_Entry entry;
-    memcpy_P(&entry, &P_LUT_BASE[i], sizeof(P_LUT_Entry));
-    
-    int16_t diff = abs(temp_idx - entry.temp_idx);
-    if (diff < min_diff) {
-      min_diff = diff;
-      p_base = entry.p_value;
-      
-      // Si trobem exacte, sortir
-      if (diff == 0) break;
-    }
-  }
-  
-  // Aplicar transformació XOR segons rolling code
-  uint8_t xor_val = (nib7 < 16) ? NIB7_XOR_TABLE[nib7] : 0;
-  return (p_base ^ xor_val) & 0xF;
+void temp_to_e_d(float temp_c, int &e, int &d) {
+  e = (int)temp_c;
+  float absT = fabsf(temp_c);
+  int t10 = (int)roundf(absT * 10.0f);
+  int abs_e = abs(e);
+  d = t10 - abs_e * 10;
 }
 
-void calculate_universal_checksum(const uint8_t nibbles[12], 
-                                   float temp_celsius,
-                                   uint8_t nib7,
-                                   uint8_t &r1, uint8_t &m, uint8_t &p) {
-  // R1 i M: Fórmula universal (suma de nibbles)
-  uint16_t sum = 0;
-  for (int i = 0; i < 12; i++) {
-    sum += nibbles[i];
+uint16_t calc_R12(float temp_c) {
+  int e, d;
+  temp_to_e_d(temp_c, e, d);
+
+  if (e < M_MIN_E) e = M_MIN_E;
+  if (e > M_MAX_E) e = M_MAX_E;
+  if (d < 0)       d = 0;
+  if (d > 9)       d = 9;
+
+  uint16_t P = P_TABLE[d];
+  uint16_t M = M_TABLE[e - M_MIN_E];
+  return (P ^ M) & 0x0FFF;
+}
+
+uint8_t calc_os21_checksum(const uint8_t msg[8]) {
+  uint8_t s = 0;
+  for (int i = 0; i < 6; ++i) {
+    uint8_t b = msg[i];
+    s += (uint8_t)((b >> 4) + (b & 0x0F));
   }
-  
-  uint8_t checksum_byte = sum & 0xFF;
-  r1 = checksum_byte & 0xF;        // Nibble baix
-  m = (checksum_byte >> 4) & 0xF;  // Nibble alt
-  
-  // P: LUT + transformació XOR
-  p = get_p_from_lut(temp_celsius, nib7);
+  s &= 0xFF;
+  uint8_t high = (s & 0xF0) >> 4;
+  uint8_t low  = (s & 0x0F);
+  return (uint8_t)((low << 4) | high);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,58 +146,46 @@ void setup_rmt() {
 }
 
 // ---------------------------------------------------------------------------
-// GENERADOR DE PAYLOAD AMB TAULES UNIVERSALS
+// GENERADOR DE PAYLOAD (método correcto con R12)
 // ---------------------------------------------------------------------------
 
-void build_payload_nibbles(float temp_c, uint8_t channel, uint8_t device_id, 
-                           uint8_t nib7, uint8_t nibbles[15]) {
-  // Posicions 0-3: ID del sensor (EC40)
-  nibbles[0] = 0xE;
-  nibbles[1] = 0xC;
-  nibbles[2] = 0x4;
-  nibbles[3] = 0x0;
-  
-  // Posició 4: Channel
-  nibbles[4] = channel & 0xF;
-  
-  // Posicions 5-6: House Code (LSN, MSN)
-  nibbles[5] = device_id & 0xF;
-  nibbles[6] = (device_id >> 4) & 0xF;
-  
-  // Posició 7: Rolling code
-  nibbles[7] = nib7 & 0xF;
-  
-  // Posicions 8-10: Temperatura BCD
-  float temp_abs = fabs(temp_c);
-  int temp_int = (int)round(temp_abs * 10.0);
-  
-  nibbles[8] = temp_int % 10;              // LSN
-  nibbles[9] = (temp_int / 10) % 10;       // Mid
-  nibbles[10] = (temp_int / 100) % 10;     // MSN
-  
-  // Posició 11: Flags
-  uint8_t flags = (temp_c < 0) ? 0x8 : 0x0;
-  nibbles[11] = flags;
-  
-  // Posicions 12-14: Checksum (R1, M, P)
-  uint8_t r1, m, p;
-  calculate_universal_checksum(nibbles, temp_c, nib7, r1, m, p);
-  
-  nibbles[12] = r1;
-  nibbles[13] = m;
-  nibbles[14] = p;
+void temp_to_bcd_bytes(float temp_c, uint8_t &msg4, uint8_t &msg5) {
+  uint8_t sign_bit = 0;
+  if (temp_c < 0.0f) {
+    sign_bit = 1;
+    temp_c = -temp_c;
+  }
+
+  int t10 = (int)roundf(temp_c * 10.0f);
+  int d0  = t10 % 10;
+  int ent = t10 / 10;
+  int u   = ent % 10;
+  int d1  = (ent / 10) % 10;
+
+  msg4 = (uint8_t)((d0 & 0x0F) << 4) | (uint8_t)(u & 0x0F);
+
+  int hundreds      = 0;
+  uint8_t lowNibble = (uint8_t)((sign_bit << 3) | (hundreds & 0x07));
+  msg5 = (uint8_t)((d1 & 0x0F) << 4) | lowNibble;
 }
 
-void nibbles_to_bytes(const uint8_t nibbles[15], uint8_t bytes[8]) {
-  // Convertir 15 nibbles a 8 bytes (format EC40 post-reflect)
-  bytes[0] = (nibbles[0] << 4) | nibbles[1];  // EC
-  bytes[1] = (nibbles[2] << 4) | nibbles[3];  // 40
-  bytes[2] = (nibbles[4] << 4) | nibbles[5];  // Channel + House_LSN
-  bytes[3] = (nibbles[6] << 4) | nibbles[7];  // House_MSN + Rolling
-  bytes[4] = (nibbles[8] << 4) | nibbles[9];  // Temp LSN + Mid
-  bytes[5] = (nibbles[10] << 4) | nibbles[11]; // Temp MSN + Flags
-  bytes[6] = (nibbles[12] << 4) | nibbles[13]; // R1 + M
-  bytes[7] = (nibbles[14] << 4) | 0x0;         // P + postamble(0)
+void build_ec40_post(float temp_c, uint8_t channel, uint8_t device_id, uint8_t msg[8]) {
+  msg[0] = 0xEC;
+  msg[1] = 0x40;
+
+  uint8_t id_low  = (uint8_t)(device_id & 0x0F);
+  uint8_t id_high = (uint8_t)(device_id & 0xF0);
+
+  msg[2] = (uint8_t)(((channel & 0x0F) << 4) | id_low);
+  msg[3] = id_high;
+
+  temp_to_bcd_bytes(temp_c, msg[4], msg[5]);
+
+  uint16_t r12 = calc_R12(temp_c);
+  msg[3] = (uint8_t)((msg[3] & 0xF0) | ((r12 >> 8) & 0x0F));
+  msg[7] = (uint8_t)(r12 & 0xFF);
+
+  msg[6] = calc_os21_checksum(msg);
 }
 
 void reflect_nibbles(const uint8_t *in, uint8_t *out, size_t len) {
@@ -352,12 +242,9 @@ void build_raw_from_payload(const uint8_t payload_bytes[8], char *out_hex) {
 }
 
 void sendOregonFrame(float temp_c, uint8_t channel, uint8_t device_id, uint8_t nib7) {
-  // Generar payload amb taules universals
-  uint8_t nibbles[15];
-  build_payload_nibbles(temp_c, channel, device_id, nib7, nibbles);
-  
+  // Generar payload con método correcto (R12 = P XOR M)
   uint8_t payload_bytes[8];
-  nibbles_to_bytes(nibbles, payload_bytes);
+  build_ec40_post(temp_c, channel, device_id, payload_bytes);
   
   char raw_hex[43];
   build_raw_from_payload(payload_bytes, raw_hex);
@@ -372,12 +259,6 @@ void sendOregonFrame(float temp_c, uint8_t channel, uint8_t device_id, uint8_t n
   Serial.print(F(", Nib7: 0x"));
   Serial.println(nib7, HEX);
   
-  Serial.print(F("Payload (15 nib): "));
-  for (int i = 0; i < 15; i++) {
-    Serial.print(nibbles[i], HEX);
-  }
-  Serial.println();
-  
   Serial.print(F("EC40 bytes: "));
   for (int i = 0; i < 8; ++i) {
     if (payload_bytes[i] < 0x10) Serial.print('0');
@@ -388,14 +269,21 @@ void sendOregonFrame(float temp_c, uint8_t channel, uint8_t device_id, uint8_t n
   Serial.print(F("RAW HEX: "));
   Serial.println(raw_hex);
 
-  // Transmetre
+  // Transmetre amb protocol Oregon Scientific estàndard
   rmt_item32_t items[512];
   int item_len = 0;
   build_raw_ook_frame(raw_hex, items, item_len);
 
-  rmt_write_items(RMT_CH, items, item_len, true);
-  delayMicroseconds(4096);
-  rmt_write_items(RMT_CH, items, item_len, true);
+  // Gap inicial (important per sincronització del receptor)
+  delay(10);
+  
+  // Transmetre 4 vegades amb gap de 10ms (estàndard Oregon)
+  for (int i = 0; i < 4; i++) {
+    rmt_write_items(RMT_CH, items, item_len, true);
+    if (i < 3) {  // No fer delay després de l'última transmissió
+      delay(10);  // 10ms entre repeticions
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

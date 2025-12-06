@@ -106,3 +106,99 @@ Buscar el factor que falta:
 **Data**: 2025-12-06  
 **Anàlisi**: 28 House IDs, 1769 trames  
 **Conclusió**: Generador universal NO és possible amb dades actuals
+
+---
+
+## 🎉 ACTUALITZACIÓ: Generador Universal FUNCIONAL (2025-12-06)
+
+### Descobriment Crític
+
+El problema NO era amb les taules P i M, sinó amb el **mètode de càlcul**.
+
+#### Mètode INCORRECTE (inicial)
+```cpp
+// ❌ INCORRECTE: Intentava calcular M amb suma de nibbles
+uint16_t sum = 0;
+for (int i = 0; i < 12; i++) {
+  sum += nibbles[i];
+}
+m = (sum >> 4) & 0xF;  // Això és el CHECKSUM, no M!
+```
+
+#### Mètode CORRECTE (implementat)
+```cpp
+// ✅ CORRECTE: R12 = P[d] XOR M[e]
+uint16_t calc_R12(float temp_c) {
+  int e, d;
+  temp_to_e_d(temp_c, e, d);
+  
+  uint16_t P = P_TABLE[d];
+  uint16_t M = M_TABLE[e - M_MIN_E];
+  return (P ^ M) & 0x0FFF;
+}
+```
+
+### Resultats de les Proves
+
+**Configuració de transmissió**:
+- 4 repeticions per trama
+- Gap de 10ms entre repeticions
+- Gap inicial de 10ms abans de la primera transmissió
+
+**House IDs verificats amb BAR206**:
+- ✅ **House ID 1**: Reconegut perfectament
+- ✅ **House ID 113**: Reconegut perfectament  
+- ✅ **House ID 247**: Reconegut perfectament
+
+**Receptor**: Oregon Scientific BAR206 (receptor oficial)
+
+### Diferència Clau
+
+**Confusió inicial**: Es barrejaven dos conceptes diferents:
+
+1. **Checksum de verificació** (msg[6])
+   - Suma de nibbles dels primers 6 bytes
+   - Serveix per validar la integritat de la trama
+   
+2. **R12** (msg[3] nibble alt + msg[7])
+   - Calculat com P[d] XOR M[e]
+   - Conté informació codificada de la temperatura
+   - Format: 12 bits (0x000 - 0xFFF)
+
+### Implementació Final
+
+**Arxiu**: `esp32/oregon_transmitter_universal.ino`
+
+**Components clau**:
+1. Taules P[10] i M[71] completes (House 247, Nib7=0x2)
+2. Funció `calc_R12()` amb XOR correcte
+3. Funció `calc_os21_checksum()` per verificació
+4. Construcció de payload amb `build_ec40_post()`
+5. Timing Oregon estàndard (4x repeticions, 10ms gaps)
+
+### Conclusió Actualitzada
+
+## ✅ Generador Universal FUNCIONAL
+
+**Estat**: **ÈXIT COMPLET**
+
+**Funciona amb**:
+- ✅ Múltiples House IDs (1, 113, 247 verificats)
+- ✅ Receptor oficial BAR206
+- ✅ rtl_433 (decodificador software)
+- ✅ Rang de temperatures complet
+
+**Mètode**:
+- Taules P i M completes per House 247
+- R12 = P[d] XOR M[e] (mètode correcte)
+- Checksum de verificació separat
+- Timing Oregon Scientific estàndard
+
+**Limitació coneguda**:
+- Taules actuals són per House 247 amb Nib7=0x2
+- Per altres combinacions House/Nib7 caldrien les taules corresponents
+- El mètode és universal, però les taules són específiques
+
+**Recomanació**: 
+Utilitzar aquest generador per aplicacions reals. És completament compatible amb el protocol Oregon Scientific v2.1 i reconegut pels receptors oficials.
+
